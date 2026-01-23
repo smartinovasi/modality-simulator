@@ -8,7 +8,6 @@ from pydicom.uid import generate_uid
 from pynetdicom import AE, build_context
 from pynetdicom.sop_class import ModalityWorklistInformationFind
 
-# Matikan validasi ketat
 pydicom.config.settings.reading_validation_mode = pydicom.config.IGNORE
 pydicom.config.settings.writing_validation_mode = pydicom.config.IGNORE
 
