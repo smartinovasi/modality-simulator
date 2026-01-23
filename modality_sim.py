@@ -52,8 +52,6 @@ def query_worklist():
         return []
 
 def process_and_send(patient_data):
-    # --- PROSES LATAR BELAKANG (SILENT) ---
-    # Bagian ini bekerja tanpa menampilkan text ke layar
     if not os.path.exists(SOURCE_FOLDER):
         print(f"❌ ERROR: Folder '{SOURCE_FOLDER}' hilang!")
         return
@@ -106,8 +104,7 @@ def process_and_send(patient_data):
         ds.StudyDate = dt
         ds.ContentDate = dt
 
-        # --- OUTPUT MULAI DARI SINI (STEP 2) ---
-        print("\nMengirim Hasil ke PACS...") # Dulu Step 3, sekarang jadi Step 2
+        print("\nMengirim Hasil ke PACS...")
 
         ae = AE(ae_title=MY_AE_TITLE)
         context = build_context(original_sop_class, original_transfer_syntax)
@@ -117,7 +114,6 @@ def process_and_send(patient_data):
         if assoc.is_established:
             status = assoc.send_c_store(ds)
             if status and status.Status == 0x0000:
-                # Pesan Sukses Klasik (Seperti V6)
                 print(f"✅ SUKSES! Gambar JPEG/RAW terkirim untuk: {pat_name}")
             else:
                 print(f"❌ Gagal kirim. Status: 0x{status.Status:04x}")
