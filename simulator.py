@@ -35,11 +35,13 @@ def query_worklist():
         ds.PatientSex = ''
         ds.StudyInstanceUID = ''
         ds.RequestedProcedureDescription = ''
+        ds.ReferringPhysicianName = ''
 
         sps_seq = Dataset()
         sps_seq.Modality = ''
         sps_seq.ScheduledStationAETitle = ''
         sps_seq.ScheduledProcedureStepStartDate = ''
+        sps_seq.ScheduledPerformingPhysicianName = ''
         ds.ScheduledProcedureStepSequence = [sps_seq]
 
         responses = assoc.send_c_find(ds, ModalityWorklistInformationFind)
@@ -64,16 +66,17 @@ def process_and_send(patient_data):
     filepath = os.path.join(SOURCE_FOLDER, selected_filename)
 
     pat_name = str(patient_data.get('PatientName', 'No Name')).replace('^', ' ')
+    ref_doc = str(patient_data.get('ReferringPhysicianName', '')).replace('^', ' ')
 
     try:
-        # Baca File
+        # Baca File Dummy
         ds = pydicom.dcmread(filepath, force=True)
 
         # Deteksi Format Asli
         original_transfer_syntax = ds.file_meta.TransferSyntaxUID
         original_sop_class = ds.SOPClassUID
 
-        # --- INJECT DATA BARU ---
+        # --- INJECT DATA BARU DARI WORKLIST ---
         acc_num = patient_data.get('AccessionNumber', '')
         study_uid = patient_data.get('StudyInstanceUID', generate_uid())
 
@@ -86,6 +89,7 @@ def process_and_send(patient_data):
         ds.StudyDescription = patient_data.get('RequestedProcedureDescription', 'Radiology Exam')
         ds.InstitutionName = INSTITUTION_NAME
         ds.StudyInstanceUID = study_uid
+        ds.ReferringPhysicianName = ref_doc
 
         if 'ScheduledProcedureStepSequence' in patient_data:
             ds.Modality = patient_data.ScheduledProcedureStepSequence[0].get('Modality', 'OT')
@@ -96,12 +100,20 @@ def process_and_send(patient_data):
         if hasattr(ds, 'file_meta'):
             ds.file_meta.MediaStorageSOPInstanceUID = ds.SOPInstanceUID
 
-        ds.SeriesDescription = f"Simulasi {ds.Modality} (Source: {selected_filename})"
+        ds.SeriesDescription = f"Simulasi {ds.Modality} - {ds.StudyDescription}"
 
         # Update Tanggal
         dt = time.strftime("%Y%m%d")
+        tm = time.strftime("%H%M%S")
         ds.StudyDate = dt
+        ds.SeriesDate = dt
         ds.ContentDate = dt
+        ds.StudyTime = tm
+
+        print(f"\n--- DATA PREVIEW ---")
+        print(f"Pasien  : {pat_name}")
+        print(f"Dokter  : {ref_doc}")
+        print(f"Modality: {ds.Modality}")
 
         print("\nMengirim Hasil ke PACS...")
 
@@ -113,7 +125,7 @@ def process_and_send(patient_data):
         if assoc.is_established:
             status = assoc.send_c_store(ds)
             if status and status.Status == 0x0000:
-                print(f"✅ SUKSES! Gambar JPEG/RAW terkirim untuk: {pat_name}")
+                print(f"✅ SUKSES! Gambar terkirim untuk Accession: {acc_num}")
             else:
                 print(f"❌ Gagal kirim. Status: 0x{status.Status:04x}")
             assoc.release()
@@ -122,6 +134,8 @@ def process_and_send(patient_data):
 
     except Exception as e:
         print(f"❌ Error sistem: {e}")
+        import traceback
+        traceback.print_exc()
 
 def main():
     while True:
@@ -138,28 +152,30 @@ def main():
             continue
 
         print(f"\n📋 Ditemukan {len(items)} Pasien:")
-        print(f"{'No':<4} {'Accession #':<18} {'Modality':<5} {'Patient Name'}")
-        print("-" * 60)
+        print(f"{'No':<4} {'Accession #':<15} {'Modality':<5} {'Patient Name':<20} {'Ref. Doctor'}")
+        print("-" * 75)
 
         for i, item in enumerate(items):
             try:
                 pname = str(item.get('PatientName', '-')).replace('^', ' ')
                 acc = item.get('AccessionNumber', '-')
+                ref_doc = str(item.get('ReferringPhysicianName', '-')).replace('^', ' ')
+
                 mod = '-'
                 if 'ScheduledProcedureStepSequence' in item:
                      mod = item.ScheduledProcedureStepSequence[0].get('Modality', '-')
-                print(f"{i+1:<4} {acc:<18} {mod:<5} {pname}")
+
+                print(f"{i+1:<4} {acc:<15} {mod:<5} {pname[:19]:<20} {ref_doc[:15]}")
             except: pass
 
-        print("-" * 60)
-        choice = input("Pilih nomor pasien (atau 'q' keluar): ")
+        print("-" * 75)
+        choice = input("Pilih nomor pasien untuk diperiksa (atau 'q' keluar): ")
 
         if choice.lower() == 'q': break
 
         try:
             idx = int(choice) - 1
             if 0 <= idx < len(items):
-                # Panggil fungsi clean
                 process_and_send(items[idx])
                 input("\n[Enter] Kembali ke menu...")
         except ValueError:
